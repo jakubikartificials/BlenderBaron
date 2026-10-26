@@ -29,10 +29,18 @@ interface GameCanvasProps {
 const _camTargetPos = new THREE.Vector3();
 const _camLookTarget = new THREE.Vector3();
 const _particleDummy = new THREE.Object3D();
-const _colorSmoke = new THREE.Color('#334155');
-const _colorFire = new THREE.Color('#f97316');
+
+// Pink-purple blurred smoke colors
+const _colorPink = new THREE.Color('#f43f5e');
+const _colorMagenta = new THREE.Color('#ec4899');
+const _colorPurple = new THREE.Color('#a855f7');
+const _colorDeepViolet = new THREE.Color('#7e22ce');
+const _colorSoftOrchid = new THREE.Color('#e879f9');
+const _colorTempSmoke = new THREE.Color();
+
+const _colorFire = new THREE.Color('#fb923c');
 const _colorRepair = new THREE.Color('#34d399');
-const _colorTrail = new THREE.Color('#e2e8f0');
+const _colorTrail = new THREE.Color('#d8b4fe');
 
 function createSkyTexture(topHex: string, horizonHex: string): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -52,6 +60,28 @@ function createSkyTexture(topHex: string, horizonHex: string): THREE.CanvasTextu
   return tex;
 }
 
+// Procedural soft blurred radial smoke puff texture
+function createBlurredSmokeTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+
+  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0.0, 'rgba(255, 255, 255, 0.95)');
+  grad.addColorStop(0.22, 'rgba(255, 255, 255, 0.75)');
+  grad.addColorStop(0.48, 'rgba(255, 255, 255, 0.35)');
+  grad.addColorStop(0.72, 'rgba(255, 255, 255, 0.12)');
+  grad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
+
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 interface ParticleState {
   active: boolean;
   x: number;
@@ -60,9 +90,12 @@ interface ParticleState {
   vx: number;
   vy: number;
   vz: number;
+  rot: number;
+  spin: number;
   life: number;
   maxLife: number;
   scale: number;
+  colorVariant: number;
   kind: 'smoke' | 'spark' | 'repair' | 'trail';
 }
 
@@ -223,9 +256,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     biplane.root.position.copy(simRef.current.planePos);
     scene.add(biplane.root);
 
-    const maxParticles = 140;
-    const particleGeo = new THREE.DodecahedronGeometry(0.28, 0);
-    const particleMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+    // Blurred Soft Smoke & Particle System
+    const maxParticles = 180;
+    const smokeTexture = createBlurredSmokeTexture();
+    const particleGeo = new THREE.PlaneGeometry(1, 1);
+    const particleMat = new THREE.MeshBasicMaterial({
+      map: smokeTexture,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      side: THREE.DoubleSide,
+    });
+
     const particleMesh = new THREE.InstancedMesh(particleGeo, particleMat, maxParticles);
     particleMesh.frustumCulled = false;
     particleMesh.instanceColor = new THREE.InstancedBufferAttribute(
@@ -242,9 +284,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       vx: 0,
       vy: 0,
       vz: 0,
+      rot: 0,
+      spin: 0,
       life: 0,
       maxLife: 1,
       scale: 0.001,
+      colorVariant: 0,
       kind: 'smoke',
     }));
     let particleCursor = 0;
@@ -269,9 +314,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       p.vx = vx;
       p.vy = vy;
       p.vz = vz;
+      p.rot = Math.random() * Math.PI * 2;
+      p.spin = (Math.random() - 0.5) * 1.8;
       p.life = 0;
       p.maxLife = maxLife;
       p.scale = scale;
+      p.colorVariant = Math.random();
       p.kind = kind;
     };
 
@@ -494,6 +542,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       keyLight.position.set(sim.planePos.x + 40, 75, sim.planePos.z + 35);
       keyLight.target.position.copy(sim.planePos);
 
+      // Celebration repair particle burst
       if (sim.spawnRepairBurst) {
         sim.spawnRepairBurst = false;
         for (let i = 0; i < 28; i++) {
@@ -506,28 +555,31 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             Math.sin(ang) * 6.5 + 2,
             (Math.random() - 0.5) * 6,
             0.75,
-            1.15,
+            1.6,
             'repair'
           );
         }
       }
 
+      // Emission of blurred pink-purple smoke when malfunctioning, or soft contrail when flying healthy
       smokeEmitTimer += dt;
-      if (smokeEmitTimer >= 0.045) {
+      if (smokeEmitTimer >= 0.038) {
         smokeEmitTimer = 0;
         if (st.isMalfunctioning) {
+          // Billowing soft pink & purple volumetric smoke puffs from the engine
           spawnParticle(
-            sim.planePos.x + (Math.random() - 0.5) * 0.6,
-            sim.planePos.y + (Math.random() - 0.5) * 0.4,
-            sim.planePos.z + 1.8,
-            (Math.random() - 0.5) * 2.2,
-            1.6 + Math.random() * 1.5,
-            6.5,
-            0.95,
-            1.35,
-            Math.random() < 0.28 ? 'spark' : 'smoke'
+            sim.planePos.x + (Math.random() - 0.5) * 0.5,
+            sim.planePos.y + (Math.random() - 0.5) * 0.35,
+            sim.planePos.z + 1.6,
+            (Math.random() - 0.5) * 1.8,
+            0.8 + Math.random() * 1.2,
+            5.8,
+            1.25,
+            1.85,
+            Math.random() < 0.22 ? 'spark' : 'smoke'
           );
         } else {
+          // Subtle soft blurred lavender-pink contrail puffs from the wingtips
           [-4.0, 4.0].forEach((wx) => {
             spawnParticle(
               sim.planePos.x + wx * Math.cos(sim.roll),
@@ -535,15 +587,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               sim.planePos.z + 0.2,
               0,
               0,
-              4.0,
-              0.48,
-              0.42,
+              3.5,
+              0.55,
+              0.65,
               'trail'
             );
           });
         }
       }
 
+      // Update and billboard particles to face camera
       for (let i = 0; i < maxParticles; i++) {
         const p = particles[i];
         if (!p.active) {
@@ -568,21 +621,46 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         p.z += p.vz * dt;
 
         const progress = p.life / p.maxLife;
-        const s =
-          p.kind === 'smoke'
-            ? p.scale * (0.6 + progress * 1.4) * (1 - progress * 0.5)
-            : p.scale * (1 - progress);
+
+        // Smooth expansion and volumetric billowing for blurred smoke
+        let s: number;
+        if (p.kind === 'smoke') {
+          s = p.scale * (0.8 + progress * 2.8);
+        } else if (p.kind === 'trail') {
+          s = p.scale * (0.9 + progress * 1.6);
+        } else {
+          s = p.scale * (1 - progress);
+        }
 
         _particleDummy.position.set(p.x, p.y, p.z);
-        _particleDummy.rotation.set(progress * 3, progress * 2, 0);
+        // Billboard rotation: face camera, with slight 2D spin for organic fluid smoke motion
+        _particleDummy.quaternion.copy(camera.quaternion);
+        _particleDummy.rotateZ(p.rot + progress * p.spin);
         _particleDummy.scale.setScalar(Math.max(0.01, s));
         _particleDummy.updateMatrix();
         particleMesh.setMatrixAt(i, _particleDummy.matrix);
 
-        if (p.kind === 'smoke') particleMesh.setColorAt(i, _colorSmoke);
-        else if (p.kind === 'spark') particleMesh.setColorAt(i, _colorFire);
-        else if (p.kind === 'repair') particleMesh.setColorAt(i, _colorRepair);
-        else particleMesh.setColorAt(i, _colorTrail);
+        if (p.kind === 'smoke') {
+          // Rich, vibrant pink to purple gradient as smoke billows and softens
+          if (p.colorVariant < 0.5) {
+            _colorTempSmoke.copy(_colorPink).lerp(_colorPurple, progress * 1.15);
+          } else {
+            _colorTempSmoke.copy(_colorSoftOrchid).lerp(_colorDeepViolet, progress);
+          }
+          // Smooth alpha fade out
+          const fade = Math.max(0, 1 - Math.pow(progress, 1.6));
+          _colorTempSmoke.multiplyScalar(fade);
+          particleMesh.setColorAt(i, _colorTempSmoke);
+        } else if (p.kind === 'spark') {
+          _colorTempSmoke.copy(_colorFire).multiplyScalar(1 - progress);
+          particleMesh.setColorAt(i, _colorTempSmoke);
+        } else if (p.kind === 'repair') {
+          _colorTempSmoke.copy(_colorRepair).multiplyScalar(1 - progress);
+          particleMesh.setColorAt(i, _colorTempSmoke);
+        } else {
+          _colorTempSmoke.copy(_colorTrail).multiplyScalar((1 - progress) * 0.75);
+          particleMesh.setColorAt(i, _colorTempSmoke);
+        }
       }
       particleMesh.instanceMatrix.needsUpdate = true;
       if (particleMesh.instanceColor) particleMesh.instanceColor.needsUpdate = true;
@@ -650,6 +728,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       activeWorld?.dispose();
       activeSkyTex?.dispose();
+      smokeTexture.dispose();
       envTex.dispose();
       biplane.dispose();
       particleGeo.dispose();

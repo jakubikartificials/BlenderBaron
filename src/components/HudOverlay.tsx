@@ -19,6 +19,7 @@ interface HudOverlayProps {
   totalCompletedCount: number;
   activeTask: RepairTask | null;
   activeTokenIndices: number[];
+  wrongAttempts: number;
   telemetry: TelemetryData;
   isMuted: boolean;
   gameStarted: boolean;
@@ -36,6 +37,7 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
   completedTasksInLevel,
   activeTask,
   activeTokenIndices,
+  wrongAttempts,
   telemetry,
   isMuted,
   gameStarted,
@@ -184,39 +186,85 @@ export const HudOverlay: React.FC<HudOverlayProps> = ({
                 {activeTask.repairStory}
               </p>
 
-              {/* Tlačidlo / Klávesy pre opravu */}
-              <button
-                type="button"
-                onClick={onManualCompleteActiveTask}
-                title="Stlač klávesovú skratku na klávesnici (alebo klikni tu)"
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900 border border-amber-400/50 hover:border-amber-300 hover:bg-slate-800 transition-colors cursor-pointer group"
-              >
-                <span className="text-[11px] text-slate-400 group-hover:text-slate-200 text-left">
-                  {activeTask.altShortcutsLabel || 'Stlač na klávesnici:'}
-                </span>
+              {/* Tlačidlo / Klávesy pre opravu — odhalenie až po 2 nesprávnych pokusoch */}
+              {wrongAttempts >= 2 ? (
+                <button
+                  type="button"
+                  onClick={onManualCompleteActiveTask}
+                  title="Stlač klávesovú skratku na klávesnici (alebo klikni tu)"
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900 border border-emerald-400/50 hover:border-emerald-300 hover:bg-slate-800 transition-colors cursor-pointer group"
+                >
+                  <div className="flex flex-col text-left">
+                    <span className="text-[11px] font-semibold text-emerald-300 group-hover:text-emerald-200">
+                      {activeTask.altShortcutsLabel || 'Nápoveda odhalená · Stlač:'}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      Správna skratka (alebo klikni pre opravu)
+                    </span>
+                  </div>
 
-                <div className="flex items-center gap-1 shrink-0">
-                  {activeTask.keyTokens.map((token, idx) => {
-                    const isPressed = activeTokenIndices.includes(idx);
-                    return (
-                      <React.Fragment key={token}>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {activeTask.keyTokens.map((token, idx) => {
+                      const isPressed = activeTokenIndices.includes(idx);
+                      return (
+                        <React.Fragment key={token}>
+                          {idx > 0 && (
+                            <span className="text-xs font-bold text-slate-400">+</span>
+                          )}
+                          <kbd
+                            className={`font-mono-tech px-2.5 py-1 rounded text-xs font-bold border transition-transform ${
+                              isPressed
+                                ? 'bg-emerald-500 text-slate-950 border-emerald-300 scale-95 shadow-sm'
+                                : 'bg-slate-800 text-amber-300 border-amber-400/50 shadow-sm'
+                            }`}
+                          >
+                            {token}
+                          </kbd>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onManualCompleteActiveTask}
+                  title="Stlač klávesovú skratku z Blenderu na klávesnici!"
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-900/90 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-800/80 transition-colors cursor-pointer group"
+                >
+                  <div className="flex flex-col text-left">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-semibold text-amber-300">
+                        {wrongAttempts === 0
+                          ? 'Skratka je skrytá — spomeň si:'
+                          : 'Nesprávny kláves — vyskúšaj znovu:'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">
+                      Nápoveda po 2 chybách (nesprávne pokusy: {wrongAttempts}/2)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {activeTask.keyTokens.map((_, idx) => (
+                      <React.Fragment key={idx}>
                         {idx > 0 && (
-                          <span className="text-xs font-bold text-slate-400">+</span>
+                          <span className="text-xs font-bold text-slate-500">+</span>
                         )}
-                        <kbd
-                          className={`font-mono-tech px-2.5 py-1 rounded text-xs font-bold border transition-transform ${
-                            isPressed
-                              ? 'bg-emerald-500 text-slate-950 border-emerald-300 scale-95'
-                              : 'bg-slate-800 text-amber-300 border-amber-400/40'
+                        <span
+                          className={`font-mono-tech px-2.5 py-1 rounded text-xs font-bold border transition-all ${
+                            wrongAttempts === 1
+                              ? 'bg-amber-950/60 text-amber-300 border-amber-500/70'
+                              : 'bg-slate-800 text-slate-400 border-white/20'
                           }`}
                         >
-                          {token}
-                        </kbd>
+                          ?
+                        </span>
                       </React.Fragment>
-                    );
-                  })}
-                </div>
-              </button>
+                    ))}
+                  </div>
+                </button>
+              )}
             </div>
           )}
 

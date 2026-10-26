@@ -281,6 +281,25 @@ export function createBiplane(): BiplaneRig {
   const pilotCap = new THREE.Mesh(capGeo, leatherMat);
   pilotCap.position.set(0, 0.34, 0.02);
   cockpitGroup.add(pilotCap);
+
+  // Aerodynamic cockpit windscreen
+  const windshieldMat = track(
+    new THREE.MeshStandardMaterial({
+      color: '#a5f3fc',
+      transparent: true,
+      opacity: 0.55,
+      roughness: 0.1,
+      metalness: 0.3,
+      depthWrite: false,
+    })
+  );
+  const windshieldGeo = track(
+    new THREE.CylinderGeometry(0.28, 0.32, 0.2, 7, 1, true, -Math.PI * 0.45, Math.PI * 0.9)
+  );
+  const windshield = new THREE.Mesh(windshieldGeo, windshieldMat);
+  windshield.position.set(0, 0.22, -0.28);
+  windshield.rotation.x = 0.22;
+  cockpitGroup.add(windshield);
   root.add(cockpitGroup);
 
   // Radial Engine & Propeller
@@ -392,9 +411,35 @@ export function createBiplane(): BiplaneRig {
   const lowerBridge = new THREE.Mesh(centerBridgeGeo, wingMat);
   lowerBridge.position.y = 0.055;
   lowerWingGroup.add(lowerBridge);
+
+  // Wingtip purple trim accents (matching reference design)
+  const wingTipAccentGeo = track(new THREE.BoxGeometry(0.24, 0.12, 1.34));
+  [-4.08, 4.08].forEach((tipX) => {
+    const tipUpper = new THREE.Mesh(wingTipAccentGeo, purpleTrimMat);
+    tipUpper.position.set(tipX, 0.1, 0);
+    upperWingGroup.add(tipUpper);
+
+    const tipLower = new THREE.Mesh(wingTipAccentGeo, purpleTrimMat);
+    tipLower.position.set(tipX, 0.09, 0);
+    lowerWingGroup.add(tipLower);
+  });
+
   root.add(lowerWingGroup);
 
-  // Struts
+  // Cabane struts (fuselage-to-upper wing center supports)
+  const cabaneGeo = track(new THREE.CylinderGeometry(0.024, 0.024, 0.78, 6));
+  [-0.32, 0.32].forEach((cx) => {
+    [-0.24, 0.24].forEach((cz) => {
+      const cabane = new THREE.Mesh(cabaneGeo, strutMat);
+      cabane.position.set(cx, 0.86, -0.68 + cz);
+      cabane.rotation.z = -cx * 0.18;
+      cabane.rotation.x = cz * 0.16;
+      cabane.castShadow = true;
+      root.add(cabane);
+    });
+  });
+
+  // Interplane outer struts
   const strutGeo = track(new THREE.CylinderGeometry(0.032, 0.032, 1.74, 6));
   const strutPositionsX = [-3.05, -1.42, 1.42, 3.05];
   let rightOuterStrut!: THREE.Mesh;
@@ -492,6 +537,15 @@ export function createBiplane(): BiplaneRig {
     wheel.castShadow = true;
     landingGearGroup.add(wheel);
   });
+
+  // Cross axle between main landing wheels
+  const axleGeo = track(new THREE.CylinderGeometry(0.028, 0.028, 2.12, 6));
+  axleGeo.rotateZ(Math.PI / 2);
+  const axle = new THREE.Mesh(axleGeo, strutMat);
+  axle.position.set(0, -1.04, -0.24);
+  axle.castShadow = true;
+  landingGearGroup.add(axle);
+
   root.add(landingGearGroup);
 
   // Debris block (Task 10 Delete X)
@@ -510,7 +564,7 @@ export function createBiplane(): BiplaneRig {
   debrisBlock.visible = false;
   root.add(debrisBlock);
 
-  // Selection Wireframes & Overlays
+  // Selection Wireframes & Overlays (Fuselage edges only - wing bounding box removed)
   const orangeOutlineGroup = new THREE.Group();
   const orangeLineMat = track(
     new THREE.LineBasicMaterial({
@@ -521,12 +575,6 @@ export function createBiplane(): BiplaneRig {
   );
   const fuselageEdges = track(new THREE.EdgesGeometry(fuselageGeo, 12));
   orangeOutlineGroup.add(new THREE.LineSegments(fuselageEdges, orangeLineMat));
-
-  const wingBoxProxy = track(new THREE.BoxGeometry(8.3, 0.16, 1.42));
-  const wingEdges = track(new THREE.EdgesGeometry(wingBoxProxy));
-  const topWingWire = new THREE.LineSegments(wingEdges, orangeLineMat);
-  topWingWire.position.set(0, 1.32, -0.68);
-  orangeOutlineGroup.add(topWingWire);
   orangeOutlineGroup.visible = false;
   root.add(orangeOutlineGroup);
 

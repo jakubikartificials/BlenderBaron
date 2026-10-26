@@ -28,6 +28,7 @@ export function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [transitionBanner, setTransitionBanner] = useState<string | null>(null);
   const [portalBlockedBanner, setPortalBlockedBanner] = useState<boolean>(false);
+  const [wrongAttempts, setWrongAttempts] = useState<number>(0);
 
   const [telemetry, setTelemetry] = useState<TelemetryData>({
     altitude: 340,
@@ -71,6 +72,7 @@ export function App() {
   const handleStartGame = useCallback(() => {
     soundEngine.initFlightAudio();
     setGameStarted(true);
+    setWrongAttempts(0);
     showTemporaryBanner(
       'Level 1: Slnečné štíty — použi šípky pre let a klávesové skratky Blenderu na opravu porúch!',
       4500
@@ -85,6 +87,7 @@ export function App() {
     soundEngine.playRepairSuccess();
     shortcutStateRef.current = createInitialShortcutState();
     setActiveTokenIndices([]);
+    setWrongAttempts(0);
     setLastCompletedVisual(finishedTask.visualType);
     setIsMalfunctioning(false);
     setRepairPulseCount((c) => c + 1);
@@ -113,6 +116,11 @@ export function App() {
       if (!gameStarted || !activeTask) return;
       soundEngine.initFlightAudio();
 
+      // Don't treat flight navigation arrows as shortcut attempts
+      if (e.key.startsWith('Arrow')) {
+        return;
+      }
+
       const res = evaluateTaskKeyDown(
         activeTask.id,
         e,
@@ -124,8 +132,14 @@ export function App() {
 
       if (res.completed) {
         completeCurrentTask();
-      } else if (res.stepAdvanced && !e.repeat) {
-        soundEngine.playKeyStep();
+      } else if (res.stepAdvanced) {
+        if (!e.repeat) soundEngine.playKeyStep();
+      } else {
+        const isModifier = ['Shift', 'Control', 'Alt', 'Meta'].includes(e.key);
+        if (!e.repeat && !isModifier) {
+          setWrongAttempts((prev) => prev + 1);
+          soundEngine.playKeyMismatch();
+        }
       }
     };
 
@@ -149,6 +163,7 @@ export function App() {
     if (completedTasksInLevel >= 4) return;
     shortcutStateRef.current = createInitialShortcutState();
     setActiveTokenIndices([]);
+    setWrongAttempts(0);
     setIsMalfunctioning(true);
     soundEngine.playMalfunctionAlert();
   }, [completedTasksInLevel, currentLevel, gameStarted]);
@@ -156,6 +171,7 @@ export function App() {
   const handlePortalEntered = useCallback(() => {
     shortcutStateRef.current = createInitialShortcutState();
     setActiveTokenIndices([]);
+    setWrongAttempts(0);
     setIsMalfunctioning(false);
     setPortalBlockedBanner(false);
 
@@ -185,6 +201,7 @@ export function App() {
     (lvl: number) => {
       shortcutStateRef.current = createInitialShortcutState();
       setActiveTokenIndices([]);
+      setWrongAttempts(0);
       setIsMalfunctioning(false);
       setCompletedTasksInLevel(0);
       setPortalBlockedBanner(false);
@@ -201,6 +218,7 @@ export function App() {
   const handleResetGame = useCallback(() => {
     shortcutStateRef.current = createInitialShortcutState();
     setActiveTokenIndices([]);
+    setWrongAttempts(0);
     setIsMalfunctioning(false);
     setCompletedTasksInLevel(0);
     setSolvedTaskIds(new Set());
@@ -226,6 +244,15 @@ export function App() {
     }, 3200);
   }, []);
 
+  const handleManualTaskClick = useCallback(() => {
+    if (wrongAttempts >= 2) {
+      completeCurrentTask();
+    } else {
+      setWrongAttempts((prev) => prev + 1);
+      soundEngine.playKeyMismatch();
+    }
+  }, [completeCurrentTask, wrongAttempts]);
+
   return (
     <main className="relative w-full h-full overflow-hidden bg-slate-950">
       <GameCanvas
@@ -248,13 +275,14 @@ export function App() {
         totalCompletedCount={solvedTaskIds.size}
         activeTask={activeTask}
         activeTokenIndices={activeTokenIndices}
+        wrongAttempts={wrongAttempts}
         telemetry={telemetry}
         isMuted={isMuted}
         gameStarted={gameStarted}
         transitionBanner={transitionBanner}
         portalBlockedBanner={portalBlockedBanner}
         onStartGame={handleStartGame}
-        onManualCompleteActiveTask={completeCurrentTask}
+        onManualCompleteActiveTask={handleManualTaskClick}
         onSelectLevel={handleSelectLevel}
         onResetGame={handleResetGame}
         onToggleMute={handleToggleMute}
