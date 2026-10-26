@@ -1,0 +1,6 @@
+{
+  "name": "Krídla Blenderu — 3D Letecká Hra",
+  "description": "Low-poly 3D letecká hra z pohľadu tretej osoby, v ktorej hráč opravuje padajúce dvojplošníkové lietadlo pomocou klávesových skratiek programu Blender a prelietava cez kruhové portály do nových svetov.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
