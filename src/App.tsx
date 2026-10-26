@@ -16,6 +16,7 @@ import {
 import { soundEngine } from './audio/soundEngine';
 
 export function App() {
+  const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [currentLevel, setCurrentLevel] = useState<number>(1);
   const [completedTasksInLevel, setCompletedTasksInLevel] = useState<number>(0);
   const [solvedTaskIds, setSolvedTaskIds] = useState<Set<number>>(() => new Set());
@@ -25,9 +26,7 @@ export function App() {
   const [repairPulseCount, setRepairPulseCount] = useState<number>(0);
   const [resetSignal, setResetSignal] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [transitionBanner, setTransitionBanner] = useState<string | null>(
-    'Level 1: Slnečné štíty — použi šípky pre let a klávesové skratky Blenderu na opravu lietadla!'
-  );
+  const [transitionBanner, setTransitionBanner] = useState<string | null>(null);
   const [portalBlockedBanner, setPortalBlockedBanner] = useState<boolean>(false);
 
   const [telemetry, setTelemetry] = useState<TelemetryData>({
@@ -54,12 +53,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const id = window.setTimeout(() => {
-      setTransitionBanner(null);
-    }, 5000);
-    bannerTimeoutRef.current = id;
     return () => {
-      window.clearTimeout(id);
+      if (bannerTimeoutRef.current) window.clearTimeout(bannerTimeoutRef.current);
       if (blockedTimeoutRef.current) window.clearTimeout(blockedTimeoutRef.current);
       soundEngine.dispose();
     };
@@ -72,6 +67,15 @@ export function App() {
     currentLevelConfig && isMalfunctioning && completedTasksInLevel < 4
       ? currentLevelConfig.tasks[completedTasksInLevel]
       : null;
+
+  const handleStartGame = useCallback(() => {
+    soundEngine.initFlightAudio();
+    setGameStarted(true);
+    showTemporaryBanner(
+      'Level 1: Slnečné štíty — použi šípky pre let a klávesové skratky Blenderu na opravu porúch!',
+      4500
+    );
+  }, [showTemporaryBanner]);
 
   const completeCurrentTask = useCallback(() => {
     if (!currentLevelConfig || completedTasksInLevel >= 4) return;
@@ -106,7 +110,7 @@ export function App() {
   // Global Keyboard Listener for Blender Repair Tasks
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!activeTask) return;
+      if (!gameStarted || !activeTask) return;
       soundEngine.initFlightAudio();
 
       const res = evaluateTaskKeyDown(
@@ -126,7 +130,7 @@ export function App() {
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (!activeTask) return;
+      if (!gameStarted || !activeTask) return;
       const remaining = handleShortcutKeyUp(e, shortcutStateRef.current);
       setActiveTokenIndices(remaining);
     };
@@ -137,16 +141,17 @@ export function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [activeTask, completeCurrentTask]);
+  }, [activeTask, completeCurrentTask, gameStarted]);
 
   const handleTriggerMalfunction = useCallback(() => {
+    if (!gameStarted) return;
     if (currentLevel > LEVELS.length) return;
     if (completedTasksInLevel >= 4) return;
     shortcutStateRef.current = createInitialShortcutState();
     setActiveTokenIndices([]);
     setIsMalfunctioning(true);
     soundEngine.playMalfunctionAlert();
-  }, [completedTasksInLevel, currentLevel]);
+  }, [completedTasksInLevel, currentLevel, gameStarted]);
 
   const handlePortalEntered = useCallback(() => {
     shortcutStateRef.current = createInitialShortcutState();
@@ -171,7 +176,6 @@ export function App() {
         5500
       );
     } else {
-      // In Finale free-flight, flying through the portal loops cleanly for endless sightseeing
       setResetSignal((s) => s + 1);
       showTemporaryBanner('Prelet víťazným portálom · Voľný let pokračuje!', 3200);
     }
@@ -203,7 +207,7 @@ export function App() {
     setPortalBlockedBanner(false);
     setCurrentLevel(1);
     setResetSignal((s) => s + 1);
-    showTemporaryBanner('Nový let spustený · Level 1: Slnečné štíty', 3800);
+    showTemporaryBanner('Let reštartovaný · Level 1: Slnečné štíty', 3800);
   }, [showTemporaryBanner]);
 
   const handleToggleMute = useCallback(() => {
@@ -246,8 +250,10 @@ export function App() {
         activeTokenIndices={activeTokenIndices}
         telemetry={telemetry}
         isMuted={isMuted}
+        gameStarted={gameStarted}
         transitionBanner={transitionBanner}
         portalBlockedBanner={portalBlockedBanner}
+        onStartGame={handleStartGame}
         onManualCompleteActiveTask={completeCurrentTask}
         onSelectLevel={handleSelectLevel}
         onResetGame={handleResetGame}
